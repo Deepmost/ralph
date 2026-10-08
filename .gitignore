@@ -1,0 +1,13 @@
+# Python 缓存
+__pycache__/
+*.pyc
+
+# Ralph 运行时产物
+scripts/ralph/tasks.bak/
+scripts/ralph/state.json
+
+# IDE
+.idea/
+
+# macOS
+.DS_Store

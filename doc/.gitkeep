@@ -1,0 +1,4 @@
+# 在此目录放置需求文档与设计文档
+#   - requirement.md  需求文档
+#   - design.md       设计文档
+# 随后执行：/task-decomposition @doc/requirement.md @doc/design.md
