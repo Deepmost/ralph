@@ -185,7 +185,14 @@ priority: 1
 
 ## 评测与对照实验
 
-指标维度、公式与统计口径见 [`docs/agent-eval.md`](docs/agent-eval.md)。
+指标维度、公式与统计口径见 [`docs/agent-eval.md`](docs/agent-eval.md)（全项目评测总面）。
+
+### 全项目评测（总入口）
+
+```bash
+# 聚合四个评测面，产出 docs/eval-report.md
+python3 scripts/ralph/evaluate.py --out docs/eval-report.md
+```
 
 ### 可观测性（Langfuse）
 

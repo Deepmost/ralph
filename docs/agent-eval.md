@@ -1,7 +1,19 @@
 # Ralph Agent 评测口径
 
-> 本文定义 Ralph（自主 AI Agent 循环执行器）的评测维度、指标与统计口径，并说明数据来源与采集方式。
-> 目标：把"可观测"转化为"可重放、可评分、可比较、可决策"。
+> 本文是整个 Ralph 项目的**评测总面（单一事实来源）**：既定义口径，也索引全部评测载体。
+> 一键产出全项目评测报告：`python3 scripts/ralph/evaluate.py --out docs/eval-report.md`
+
+## 全项目评测面
+
+| 面 | 载体 | 产出 | 命令 |
+|---|---|---|---|
+| ① 确定性质量/安全 | `scripts/ralph/tests/test_pm_guard.py` | 越权防腐对抗性用例（可进 CI） | `python3 scripts/ralph/tests/test_pm_guard.py` |
+| ② 在线可观测 | `scripts/ralph/eval_langfuse.py` | 调用/工具/延迟/错误指标 | `python3 scripts/ralph/eval_langfuse.py --environment ralph` |
+| ③ 对照实验 | `scripts/ralph/ab_experiment.py` + `scripts/ralph/benchmark/` | A/B 对照报告 | `python3 scripts/ralph/ab_experiment.py --report` |
+| ④ 口径定义（本文） | `docs/agent-eval.md` | 维度/公式/统计口径 | — |
+| **聚合报告** | `docs/eval-report.md` | 全项目评测（自动生成） | `python3 scripts/ralph/evaluate.py --out docs/eval-report.md` |
+
+> 各面相互独立、可单独运行；`evaluate.py` 只是把它们聚合成一份报告，不复制口径。
 
 ## 0. 评测单元：一次 task run
 
@@ -144,6 +156,12 @@ task run = 任务/成功标准 + 初始状态 + Agent 配置 + 执行环境
 ## 6. 运行方式
 
 ```bash
+# 全项目评测（聚合四面的总入口，推荐）
+python3 scripts/ralph/evaluate.py --out docs/eval-report.md
+
+# 各面单独运行
+python3 scripts/ralph/tests/test_pm_guard.py          # ① 确定性质量/安全
+
 # 最近 7 天（默认）
 python3 scripts/ralph/eval_langfuse.py
 
