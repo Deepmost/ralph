@@ -67,19 +67,24 @@ def load_config() -> dict | None:
     }
 
 
-def _http_get_json(url: str, auth: str, timeout: int = 30) -> dict:
+def _http_get_json(url: str, auth: str, timeout: int = 30, retries: int = 3) -> dict:
     """
     取 JSON。优先 curl（跨平台、带硬超时）；失败再回退 urllib。
     本机 Python 可能缺 CA 证书，urllib 会先卡满超时才失败，故 curl 优先。
+    网络抖动时重试若干次。
     """
-    try:
-        out = subprocess.run(
-            ["curl", "-sS", "--max-time", str(timeout), "-H", f"Authorization: {auth}", url],
-            capture_output=True, text=True,
-        ).stdout
-        return json.loads(out)
-    except Exception:
-        pass
+    last_err: Exception | None = None
+    for _ in range(max(retries, 1)):
+        try:
+            out = subprocess.run(
+                ["curl", "-sS", "--max-time", str(timeout), "-H", f"Authorization: {auth}", url],
+                capture_output=True, text=True,
+            ).stdout
+            return json.loads(out)
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            time.sleep(1.5)
+    # 最后回退 urllib
     import urllib.request
     req = urllib.request.Request(url)
     req.add_header("Authorization", auth)
