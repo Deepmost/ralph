@@ -31,7 +31,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 import eval_langfuse  # noqa: E402
 import ab_experiment  # noqa: E402
 
-GUARD_TEST = SCRIPT_DIR / "tests" / "test_pm_guard.py"
+TESTS_DIR = SCRIPT_DIR / "tests"
 
 
 # ══════════════════════════════════════════════════════════════
@@ -39,10 +39,11 @@ GUARD_TEST = SCRIPT_DIR / "tests" / "test_pm_guard.py"
 # ══════════════════════════════════════════════════════════════
 
 def run_unit_tests() -> dict:
-    if not GUARD_TEST.exists():
+    if not TESTS_DIR.exists():
         return {"available": False}
-    proc = subprocess.run([sys.executable, str(GUARD_TEST)],
-                          capture_output=True, text=True)
+    proc = subprocess.run(
+        [sys.executable, "-m", "unittest", "discover", "-s", str(TESTS_DIR), "-p", "test_*.py"],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT))
     out = proc.stdout + proc.stderr
     total, failures = 0, 0
     for line in out.splitlines():
@@ -124,7 +125,7 @@ def build_project_report(unit: dict, obs: dict, ab_report: str,
     A("")
     A("| 面 | 载体 | 命令 |")
     A("|---|---|---|")
-    A("| ① 确定性质量/安全 | `tests/test_pm_guard.py` | `python3 scripts/ralph/tests/test_pm_guard.py` |")
+    A("| ① 确定性质量/安全 | `tests/` | `python3 -m unittest discover -s scripts/ralph/tests` |")
     A("| ② 在线可观测 | `eval_langfuse.py` | `python3 scripts/ralph/eval_langfuse.py --environment ralph` |")
     A("| ③ 对照实验 | `ab_experiment.py` | `python3 scripts/ralph/ab_experiment.py --report` |")
     A("| ④ 口径定义 | `docs/agent-eval.md` | （文档） |")
@@ -162,7 +163,7 @@ def main() -> int:
         else:
             try:
                 rows = eval_langfuse.fetch_observations(
-                    cfg, frm, to, args.environment, None, None, 100, 10)
+                    cfg, frm, to, args.environment, None, None, 100, 5)
                 obs = eval_langfuse.compute_metrics(rows)
             except Exception as e:
                 print(f"可观测面采集失败：{e}", file=sys.stderr)

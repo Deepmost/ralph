@@ -69,25 +69,22 @@ def load_config() -> dict | None:
 
 def _http_get_json(url: str, auth: str, timeout: int = 30) -> dict:
     """
-    取 JSON。优先 urllib；遇到 SSL/环境问题回退 curl（本机 Python 可能缺 CA 证书）。
+    取 JSON。优先 curl（跨平台、带硬超时）；失败再回退 urllib。
+    本机 Python 可能缺 CA 证书，urllib 会先卡满超时才失败，故 curl 优先。
     """
-    try:
-        import urllib.request
-        req = urllib.request.Request(url)
-        req.add_header("Authorization", auth)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except Exception:
-        pass
-    # 回退 curl
     try:
         out = subprocess.run(
             ["curl", "-sS", "--max-time", str(timeout), "-H", f"Authorization: {auth}", url],
             capture_output=True, text=True,
         ).stdout
         return json.loads(out)
-    except Exception as e:
-        raise RuntimeError(f"请求失败: {e}")
+    except Exception:
+        pass
+    import urllib.request
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", auth)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
 
 
 def fetch_observations(cfg: dict, frm: str, to: str,
@@ -363,13 +360,13 @@ def build_report(frm: str, to: str, filters: dict, tasks: dict, m: dict) -> str:
     A(f"- release：{m['releases']}")
     A("")
 
-    A("## 3. 待补齐（当前接口/规范未覆盖）")
+    A("## 3. 状态说明")
     A("")
-    A("- **token / cost 明细**：v2 observations 列表接口通常不含 usageDetails；需在 Langfuse UI/Metrics 或用 Scores 补齐。")
-    A("- **事实正确率 / 证据充分度**：需 LLM-as-judge（可基于 root span output）。")
-    A("- **工具正确率**：需定义每个任务的期望工具集后做断言。")
-    A("- **pass^k / 一致性**：需同一任务跑 N 次后聚合。")
-    A("- **让 trace 可按运行/角色分组**：在 `ralph.py` 注入 `LANGFUSE_TRACING_ENVIRONMENT / RELEASE / USER_ID`。")
+    A("- ✅ 已实现：trace 按运行/角色分组（`ralph.py` 注入 `LANGFUSE_*`）；"
+      "`pass@k / pass^k`（`metrics.py` + `ab_experiment.py --repeats`）；"
+      "验证证据统计（`metrics.evidence_metrics`）。")
+    A("- ⚠️ 待补齐：token/cost 明细（列表接口不含 usageDetails，改用 UI/Metrics/Scores）；"
+      "事实正确率/证据充分度（需 LLM-as-judge）；工具正确率（需为任务定义期望工具集后断言）。")
     A("")
     return "\n".join(L)
 

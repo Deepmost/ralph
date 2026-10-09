@@ -37,7 +37,11 @@ RALPH_PY = SCRIPT_DIR / "ralph.py"
 
 BENCH_DIR = SCRIPT_DIR / "benchmark"
 DEFAULT_TASKS = BENCH_DIR / "example-tasks"
+SANDBOX_DIR = BENCH_DIR / "sandbox"
 RUNS_DIR = BENCH_DIR / "runs"
+
+sys.path.insert(0, str(SCRIPT_DIR))
+import metrics  # noqa: E402
 
 # 运行时会话会改动的文件/目录（实跑前备份、结束后恢复）
 RUNTIME_DIRS = ["tasks", "archive", "tasks.bak"]
@@ -98,6 +102,15 @@ def reset_runtime(benchmark_tasks: Path) -> None:
     # 清空 archive / tasks.bak
     for name in ("archive", "tasks.bak"):
         shutil.rmtree(SCRIPT_DIR / name, ignore_errors=True)
+    # 清理 benchmark 沙盒，避免上一组产出的代码污染下一组（保留占位文件）
+    if SANDBOX_DIR.exists():
+        for item in SANDBOX_DIR.iterdir():
+            if item.name == ".gitkeep":
+                continue
+            if item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+            else:
+                item.unlink()
     # 拷入 benchmark 任务
     for f in sorted(benchmark_tasks.glob("*.md")):
         shutil.copy2(f, tasks_dir / f.name)
@@ -222,6 +235,7 @@ def compute_run_metrics(run_dir: Path, cfg: str = "", run_id: str = "") -> dict:
         "blocked_rate": rate(len(blocked), total),
         "pm_adjustments": adj_actions,
         "guard_hits": _count_guard_hits(run_dir),
+        "evidence": metrics.evidence_metrics(run_dir),
     }
 
 
@@ -251,20 +265,32 @@ def load_runs() -> list[dict]:
     return runs
 
 
+def runs_by_config() -> dict[str, list[Path]]:
+    groups: dict[str, list[Path]] = {}
+    if RUNS_DIR.exists():
+        for d in sorted(RUNS_DIR.iterdir()):
+            if d.is_dir():
+                cfg = _infer_config(d.name)
+                if cfg:
+                    groups.setdefault(cfg, []).append(d)
+    return groups
+
+
 def build_report(runs: list[dict]) -> str:
     L: list[str] = ["# Ralph A/B 对照实验结果", ""]
     if not runs:
         L.append("_暂无运行归档。先执行 `--run`。_")
         return "\n".join(L)
 
-    L.append("| 配置 | run-id | 任务总数 | 完成 | 完成率 | 首次通过率 | 阻塞率 | 越权拦截 | PM 调整 |")
-    L.append("|---|---|---|---|---|---|---|---|---|")
+    L.append("| 配置 | run-id | 任务总数 | 完成 | 完成率 | 首次通过率 | 阻塞率 | 越权拦截 | 验证命令 | PM 调整 |")
+    L.append("|---|---|---|---|---|---|---|---|---|---|")
     for r in runs:
+        ev = r.get("evidence", {}) or {}
         L.append(
             f"| {r.get('config','?')} | {r.get('run_id','?')} | {r.get('total',0)} | "
             f"{r.get('done_ok',0)} | {r.get('completion_rate',0)}% | "
             f"{r.get('first_pass_rate',0)}% | {r.get('blocked_rate',0)}% | "
-            f"{r.get('guard_hits',0)} | {r.get('pm_adjustments',{})} |"
+            f"{r.get('guard_hits',0)} | {ev.get('verification_commands',0)} | {r.get('pm_adjustments',{})} |"
         )
     L.append("")
 
@@ -285,6 +311,20 @@ def build_report(runs: list[dict]) -> str:
                 f"{round(r.get('blocked_rate',0)-base.get('blocked_rate',0),1)} |"
             )
         L.append("")
+
+    # 一致性与可靠性：pass@k / pass^k（仅当某配置有多次运行）
+    groups = runs_by_config()
+    multi = {c: ds for c, ds in groups.items() if len(ds) >= 2}
+    if multi:
+        L.append("## 一致性与可靠性（多次运行）")
+        L.append("")
+        L.append("| 配置 | k | 任务数 | pass@k（≥1 次成功） | pass^k（k 次全成功） |")
+        L.append("|---|---|---|---|---|")
+        for c in sorted(multi):
+            pm = metrics.compute_pass_metrics(multi[c])
+            L.append(f"| {c} | {pm['k']} | {pm['tasks']} | {pm['pass_at_k']}% | {pm['pass_power_k']}% |")
+        L.append("")
+
     L.append("> 口径见 `docs/agent-eval.md`；成本/延迟可结合 `eval_langfuse.py --release <run-id>` 获取。")
     return "\n".join(L)
 
@@ -301,6 +341,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--configs", default="A,B,C,D", help="参与实验的配置，逗号分隔")
     p.add_argument("--max-iterations", type=int, default=30, help="每组最大迭代次数")
     p.add_argument("--benchmark-dir", default=str(DEFAULT_TASKS), help="benchmark 任务目录")
+    p.add_argument("--repeats", type=int, default=1, help="每个配置重复次数（用于 pass@k/pass^k）")
     return p.parse_args()
 
 
@@ -337,8 +378,9 @@ def main() -> int:
     backup_runtime(backup)
     try:
         for c in configs:
-            run_id = f"ralph-{c}-{time.strftime('%Y%m%d-%H%M%S')}"
-            run_config(c, run_id, args)
+            for rep in range(1, max(args.repeats, 1) + 1):
+                run_id = f"ralph-{c}-{time.strftime('%Y%m%d-%H%M%S')}-r{rep}"
+                run_config(c, run_id, args)
     finally:
         restore_runtime(backup)
         print(f"\n运行时文件已恢复（备份保留在 {backup}）")

@@ -15,6 +15,21 @@
 
 > 各面相互独立、可单独运行；`evaluate.py` 只是把它们聚合成一份报告，不复制口径。
 
+### 实现状态
+
+| 能力 | 状态 | 载体 |
+|---|---|---|
+| 越权防腐对抗性测试 | ✅ | `tests/test_pm_guard.py` |
+| 引擎核心逻辑测试 | ✅ | `tests/test_engine.py` |
+| 指标函数测试（pass^k/证据） | ✅ | `tests/test_metrics.py` |
+| trace 按运行/角色分组 | ✅ | `ralph.py` 注入 `LANGFUSE_*` |
+| pass@k / pass^k | ✅ | `metrics.py` + `ab_experiment.py --repeats` |
+| 验证证据（groundedness 代理） | ✅ | `metrics.evidence_metrics` |
+| A/B 对照实验 | ✅ | `ab_experiment.py` |
+| 事实正确率 / 证据充分度（judge） | ⏳ 待补齐 | 需 LLM-as-judge |
+| 工具正确率（期望工具集断言） | ⏳ 待补齐 | 需为任务定义期望工具集 |
+| token/cost 明细聚合 | ⏳ 待补齐 | Langfuse UI/Metrics/Scores |
+
 ## 0. 评测单元：一次 task run
 
 Agent 评测的最小单元不是 prompt，而是**一次完整的 task run**：

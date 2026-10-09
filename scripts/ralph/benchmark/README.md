@@ -31,7 +31,20 @@
 
 ## 示例任务集
 
-`example-tasks/` 提供一组自包含、可确定性验收的最小任务（在 `benchmark/sandbox/` 下产出代码）。
+`example-tasks/` 提供一组自包含、**可确定性验收**的任务（在 `benchmark/sandbox/` 下产出代码），
+并覆盖评测文档要求的样本分类：
+
+| 任务 | 分类 | 考察点 | 预期差异 |
+|---|---|---|---|
+| b001 slugify | 正常成功 | 基础编码 + 边界 | 各配置应都通过 |
+| b002 truncate | 正常成功 | 增量扩展 + 回归 | 各配置应都通过 |
+| b003 word_count | 正常成功 | 异常/边界处理 | 各配置应都通过 |
+| b004 CLI | **困难/多文件** | 多文件集成 | 单 Agent 更易遗漏集成测试 |
+| b005 Unicode 重构 | **回归约束** | 严格边界 + 不破坏既有测试 | 无验证组更易引入回归 |
+| b006 缺失依赖 | **工具/环境失败** | 依赖缺失时如实报告 | 无验证组更易伪造实现 |
+| b007 不可完成 | **负例** | 验证严格性 | **有验证组应 blocked；无验证组易伪造成完成** |
+
+其中 b006/b007 是**判分关键**：它们决定了「完成率高」到底是真的完成，还是没被发现的问题。
 
 任务格式即 Ralph 任务文件格式（YAML frontmatter + 背景/需求/技术设计/实现约束/验收标准）。
 
@@ -40,6 +53,16 @@
 ```bash
 python3 -m unittest discover -s scripts/ralph/benchmark/sandbox -p "test_*.py"
 ```
+
+## 多次重复与 pass^k
+
+单次运行的差异会被 LLM 随机性淹没。建议每组重复 N 次：
+
+```bash
+python3 scripts/ralph/ab_experiment.py --run --repeats 3 --configs A,B,C,D
+```
+
+报告会用 `pass@k`（至少一次成功）与 `pass^k`（k 次全部成功）区分「能力」与「可靠性」。
 
 ## 运行对照实验
 

@@ -130,8 +130,10 @@ scripts/ralph/
 ├── VALIDATOR.md        # Validator Agent 指令
 ├── PM.md               # PM Agent 指令（后向沉淀 + 前向规划）
 ├── eval_langfuse.py    # 评测采集脚本（Langfuse + 本地任务终态 → 报告）
+├── evaluate.py         # 全项目评测总入口（聚合四个评测面）
+├── metrics.py          # 指标计算（pass@k/pass^k、验证证据）
 ├── ab_experiment.py    # A/B 对照实验编排器（完整/单 Agent/无 PM/无防腐）
-├── tests/              # 单元测试（PM 越权防腐对抗性测试）
+├── tests/              # 单元测试（引擎逻辑 / 越权防腐 / 指标函数）
 ├── benchmark/          # 对照实验任务集与运行归档
 ├── adjustments.json    # PM 任务队列调整的审计日志
 ├── progress.txt        # 进度日志（Developer/Validator 写入，PM 读取）
@@ -219,19 +221,24 @@ python3 scripts/ralph/eval_langfuse.py --days 30 --environment ralph \
 ### 越权防腐单元测试
 
 ```bash
-python3 scripts/ralph/tests/test_pm_guard.py
+python3 -m unittest discover -s scripts/ralph/tests   # 全部单元测试
 ```
 
-覆盖篡改受控字段、正文篡改、伪造完成、未审计删除/重置、收敛上限、审计删除、
-备份回滚、`id` 字符串保持等 18 个对抗性用例（确定性、可进 CI）。
+覆盖三个测试文件：
+- `test_engine.py`：引擎核心逻辑（frontmatter 解析、任务调度、pi 事件流解析、环境注入）
+- `test_pm_guard.py`：越权防腐对抗性用例（篡改字段、伪造完成、未审计删除/重置、收敛上限、回滚）
+- `test_metrics.py`：指标函数（pass@k / pass^k / 验证证据）
+
+确定性、可进 CI。
 
 ### A/B 对照实验
 
 ```bash
 python3 scripts/ralph/ab_experiment.py --plan                        # 预演
 python3 scripts/ralph/ab_experiment.py --run --configs A,B,C,D       # 实跑
+python3 scripts/ralph/ab_experiment.py --run --repeats 3             # 每个配置重复 3 次
 python3 scripts/ralph/ab_experiment.py --report                      # 汇总
 ```
 
 对比 A 完整闭环 / B 仅 Developer / C 无 PM / D 关闭越权回滚四组的
-完成率、首次通过率、阻塞率与越权拦截次数。
+完成率、首次通过率、阻塞率、越权拦截与验证证据；重复多次时输出 `pass@k` / `pass^k`。
