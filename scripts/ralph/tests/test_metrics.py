@@ -118,5 +118,26 @@ class TestEvidenceMetrics(unittest.TestCase):
         self.assertEqual(ev["verification_commands"], 0)
 
 
+class TestCostMetrics(unittest.TestCase):
+    def setUp(self):
+        self.run = Path(tempfile.mkdtemp(prefix="ralph-cost-"))
+
+    def tearDown(self):
+        shutil.rmtree(self.run, ignore_errors=True)
+
+    def test_scientific_notation(self):
+        # pi 对极小费用会用科学计数法，必须正确解析（回归）
+        (self.run / "run.log").write_text(
+            "[Turn] 费用: $9.6288e-05\n[Turn] 费用: $0.00081108\n",
+            encoding="utf-8")
+        c = metrics.cost_metrics(self.run)
+        self.assertAlmostEqual(c["cost_total"], round(9.6288e-05 + 0.00081108, 6), places=6)
+        self.assertEqual(c["cost_turns"], 2)
+
+    def test_no_cost(self):
+        (self.run / "run.log").write_text("[Tool] read: a.py\n", encoding="utf-8")
+        self.assertEqual(metrics.cost_metrics(self.run)["cost_total"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

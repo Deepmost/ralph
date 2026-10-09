@@ -147,7 +147,7 @@ def tool_metrics(run_dir: Path) -> dict:
 #  成本聚合（从 run.log 的 [Turn] 费用 提取，绕过 Langfuse 列表接口限制）
 # ══════════════════════════════════════════════════════════════
 
-_COST_RE = re.compile(r"\[Turn\]\s*费用:\s*\$([0-9.]+)")
+_COST_RE = re.compile(r"\[Turn\]\s*费用:\s*\$([0-9.]+(?:[eE][-+]?\d+)?)")
 
 
 def cost_metrics(run_dir: Path) -> dict:
