@@ -164,11 +164,16 @@ def _import_ralph():
 
 
 def _count_guard_hits(run_dir: Path) -> int:
+    """统计引擎真实的越权回滚次数。
+
+    只用引擎自身的固定前缀 `PM 改动越界（` 匹配；不能用 `已从备份回滚`，
+    因为该字符串也会出现在（被 Agent 运行的）单元测试输出里，造成误计。
+    """
     log = run_dir / "run.log"
     if not log.exists():
         return 0
     return sum(1 for ln in log.read_text(encoding="utf-8", errors="replace").splitlines()
-               if "改动越界" in ln or "已从备份回滚" in ln)
+               if "PM 改动越界（" in ln)
 
 
 def compute_run_metrics(run_dir: Path, cfg: str = "", run_id: str = "") -> dict:

@@ -5,6 +5,7 @@ __pycache__/
 # Ralph 运行时产物
 scripts/ralph/tasks.bak/
 scripts/ralph/state.json
+scripts/ralph/benchmark/runs/
 
 # IDE
 .idea/
