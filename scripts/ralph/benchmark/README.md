@@ -70,14 +70,19 @@ python3 scripts/ralph/ab_experiment.py --run --repeats 3 --configs A,B,C,D
 # 1) 预演：只打印将要执行的命令，不改动任何文件
 python3 scripts/ralph/ab_experiment.py --plan
 
-# 2) 实跑（会临时接管 scripts/ralph/tasks/ 等运行时文件，结束后自动恢复）
+# 2) 实跑（默认在临时 git worktree 中隔离运行，主干零污染）
 python3 scripts/ralph/ab_experiment.py --run --configs A,B,C,D --max-iterations 30
+
+#    如需就地运行（不隔离）：
+python3 scripts/ralph/ab_experiment.py --run --no-isolate --configs A,B,C,D
 
 # 3) 汇总报告（读取每次运行归档到 runs/ 的结果）
 python3 scripts/ralph/ab_experiment.py --report
 ```
 
-> ⚠️ 实跑会真实调用模型、消耗 token，并修改工作区。脚本会对运行时文件做备份/恢复，但仍建议在干净的 git 状态下运行。
+> ⚠️ 实跑会真实调用模型、消耗 token。默认在临时 git worktree 中隔离运行（从 HEAD 新建临时分支），
+> Developer 的提交落在临时分支上，跑完连同 worktree 一起销毁，**主干零污染**。
+> 由于 worktree 取自 HEAD，请先提交你的改动再跑。
 
 ## 产出
 

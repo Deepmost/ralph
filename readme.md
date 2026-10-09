@@ -236,10 +236,13 @@ python3 -m unittest discover -s scripts/ralph/tests   # 全部单元测试
 
 ```bash
 python3 scripts/ralph/ab_experiment.py --plan                        # 预演
-python3 scripts/ralph/ab_experiment.py --run --configs A,B,C,D       # 实跑
+python3 scripts/ralph/ab_experiment.py --run --configs A,B,C,D       # 实跑（worktree 隔离）
 python3 scripts/ralph/ab_experiment.py --run --repeats 3             # 每个配置重复 3 次
 python3 scripts/ralph/ab_experiment.py --report                      # 汇总
 ```
+
+> 实跑默认在临时 **git worktree** 中隔离运行：从 HEAD 新建临时分支，Developer 的提交
+> 落在该分支上，跑完连同 worktree 一起销毁，**主干零污染**。用 `--no-isolate` 可退回就地运行。
 
 对比 A 完整闭环 / B 仅 Developer / C 无 PM / D 关闭越权回滚四组的
 完成率、首次通过率、阻塞率、越权拦截与验证证据；重复多次时输出 `pass@k` / `pass^k`。
