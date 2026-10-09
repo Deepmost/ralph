@@ -11,7 +11,8 @@ Ralph A/B 对照实验编排器。
 
 三种模式：
   --plan    只打印将要执行的命令（默认，不改动任何文件）
-  --run     实跑：临时接管运行时文件，逐组运行并归档，结束后自动恢复
+  --run     实跑：默认在临时 git worktree 中隔离运行（Developer 提交落到临时分支，跑完销毁；
+            主干零污染）；用 --no-isolate 就地运行
   --report  读取 runs/ 下的归档，输出 Markdown 对照表
 
 用法：
@@ -337,6 +338,82 @@ def build_report(runs: list[dict]) -> str:
 
 
 # ══════════════════════════════════════════════════════════════
+#  worktree 隔离
+# ══════════════════════════════════════════════════════════════
+
+def _in_git_repo() -> bool:
+    try:
+        r = subprocess.run(["git", "-C", str(PROJECT_ROOT), "rev-parse", "--is-inside-work-tree"],
+                           capture_output=True, text=True)
+        return r.returncode == 0 and r.stdout.strip() == "true"
+    except Exception:
+        return False
+
+
+def run_isolated(args: argparse.Namespace) -> int:
+    """
+    在临时 git worktree 中执行实验，隔离 Developer 的提交。
+
+    - 从当前 HEAD 新建分支 + worktree
+    - 在 worktree 里以 --in-worktree 重新执行本脚本
+    - 回收实验归档（runs/）到主仓库
+    - 无论成败都移除 worktree 并删除临时分支（Developer 的提交随之丢弃）
+    """
+    repo = PROJECT_ROOT
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    branch = f"ralph-ab-{ts}"
+    wt_parent = Path(tempfile.mkdtemp(prefix="ralph-ab-wt-"))
+    wt = wt_parent / "repo"
+
+    # 工作区不干净时警告：worktree 取自 HEAD，未提交改动不会带过去
+    dirty = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"],
+                           capture_output=True, text=True).stdout.strip()
+    if dirty:
+        print("⚠️  工作区有未提交改动；worktree 取自 HEAD，这些改动不会进入隔离环境。", file=sys.stderr)
+
+    print(f"创建隔离 worktree：branch={branch}  path={wt}")
+    try:
+        subprocess.run(["git", "-C", str(repo), "worktree", "add", "-b", branch, str(wt), "HEAD"],
+                       check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"创建 worktree 失败：{e}", file=sys.stderr)
+        shutil.rmtree(wt_parent, ignore_errors=True)
+        return 2
+
+    try:
+        wt_script = wt / "scripts" / "ralph" / "ab_experiment.py"
+        # 默认任务集映射到 worktree 内路径；显式指定的目录原样透传
+        if str(Path(args.benchmark_dir).resolve()) == str(Path(DEFAULT_TASKS).resolve()):
+            bm = str(wt / "scripts" / "ralph" / "benchmark" / "example-tasks")
+        else:
+            bm = args.benchmark_dir
+        cmd = [
+            sys.executable, str(wt_script), "--run", "--in-worktree",
+            "--configs", args.configs,
+            "--repeats", str(args.repeats),
+            "--max-iterations", str(args.max_iterations),
+            "--benchmark-dir", bm,
+        ]
+        print(f"在 worktree 内执行：{' '.join(cmd)}\n")
+        rc = subprocess.run(cmd, cwd=str(wt)).returncode
+
+        # 回收 runs 归档到主仓库
+        src_runs = wt / "scripts" / "ralph" / "benchmark" / "runs"
+        if src_runs.exists():
+            RUNS_DIR.mkdir(parents=True, exist_ok=True)
+            for d in sorted(src_runs.iterdir()):
+                if d.is_dir():
+                    shutil.copytree(d, RUNS_DIR / d.name, dirs_exist_ok=True)
+        return rc
+    finally:
+        subprocess.run(["git", "-C", str(repo), "worktree", "remove", "--force", str(wt)],
+                       check=False)
+        subprocess.run(["git", "-C", str(repo), "branch", "-D", branch], check=False)
+        shutil.rmtree(wt_parent, ignore_errors=True)
+        print(f"\n隔离 worktree 已移除，分支 {branch} 已删除（主干未被污染）。")
+
+
+# ══════════════════════════════════════════════════════════════
 #  main
 # ══════════════════════════════════════════════════════════════
 
@@ -349,6 +426,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-iterations", type=int, default=30, help="每组最大迭代次数")
     p.add_argument("--benchmark-dir", default=str(DEFAULT_TASKS), help="benchmark 任务目录")
     p.add_argument("--repeats", type=int, default=1, help="每个配置重复次数（用于 pass@k/pass^k）")
+    p.add_argument("--no-isolate", action="store_true",
+                   help="不创建 worktree，就地运行（默认会在临时 worktree 中隔离运行）")
+    p.add_argument("--in-worktree", action="store_true",
+                   help=argparse.SUPPRESS)  # 内部使用：已在 worktree 内
     return p.parse_args()
 
 
@@ -371,26 +452,41 @@ def main() -> int:
             rid = f"ralph-{c}-<timestamp>"
             print(f"## 配置 {c} — {CONFIGS[c]['desc']}")
             print(f"    {' '.join(build_command(c, rid, args.max_iterations))}\n")
-        print("实跑请加 `--run`；运行会临时接管 scripts/ralph/tasks 等运行时文件，结束后自动恢复。")
+        print("实跑请加 `--run`：默认会在临时 git worktree 中隔离运行，"
+              "Developer 的提交落在临时分支、跑完即销毁，主干零污染。"
+              "如需就地运行用 `--no-isolate`。")
         return 0
 
-    # run 模式
+    # 实跑：默认在临时 worktree 中隔离运行，避免 Developer 提交污染主干
+    if not args.in_worktree and not args.no_isolate and _in_git_repo():
+        rc = run_isolated(args)
+        print(build_report(load_runs()))
+        return rc
+
+    # run 模式（就地或已处于 worktree 内）
     benchmark = Path(args.benchmark_dir)
     if not benchmark.exists():
         print(f"benchmark 目录不存在: {benchmark}", file=sys.stderr)
         return 2
 
-    backup = Path(tempfile.mkdtemp(prefix="ralph-ab-backup-"))
-    print(f"备份运行时文件到: {backup}")
-    backup_runtime(backup)
-    try:
+    def do_runs() -> None:
         for c in configs:
             for rep in range(1, max(args.repeats, 1) + 1):
                 run_id = f"ralph-{c}-{time.strftime('%Y%m%d-%H%M%S')}-r{rep}"
                 run_config(c, run_id, args)
-    finally:
-        restore_runtime(backup)
-        print(f"\n运行时文件已恢复（备份保留在 {backup}）")
+
+    if args.in_worktree:
+        # worktree 本身已隔离，无需备份/恢复
+        do_runs()
+    else:
+        backup = Path(tempfile.mkdtemp(prefix="ralph-ab-backup-"))
+        print(f"备份运行时文件到: {backup}")
+        backup_runtime(backup)
+        try:
+            do_runs()
+        finally:
+            restore_runtime(backup)
+            print(f"\n运行时文件已恢复（备份保留在 {backup}）")
 
     print(build_report(load_runs()))
     return 0
