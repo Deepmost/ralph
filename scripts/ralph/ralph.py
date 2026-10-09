@@ -50,6 +50,28 @@ PM_PATTERNS_WARN_LINES = 200 # docs/patterns-*.md 总行数告警阈值
 
 MAX_ITERATIONS = 50
 AGENT = "pi"
+NO_VALIDATOR = False   # --no-validator：跳过验证（对照实验用）
+NO_PM = False          # --no-pm：跳过 PM 治理（对照实验用）
+NO_GUARD = False       # --no-guard：关闭 PM 越权回滚（对照实验用）
+
+# ── Langfuse 观测标签 ──
+# 本次运行的唯一标识，作为 trace 的 release 标签，供 eval_langfuse.py 按运行聚合
+LANGFUSE_RUN_ID = os.environ.get("RALPH_RUN_ID") or time.strftime("%Y%m%d-%H%M%S")
+
+
+def _inject_langfuse_env(env: dict, role: str = "") -> None:
+    """
+    给 pi 子进程注入 Langfuse 观测标签，便于按「运行 / 角色」聚合 trace。
+    依赖 pi 的 @langfuse/pi-observability-plugin；环境变量优先级高于其配置文件。
+    设置 RALPH_NO_LANGFUSE=1 可整体关闭上报。
+    """
+    if os.environ.get("RALPH_NO_LANGFUSE") == "1":
+        env["LANGFUSE_TRACING_ENABLED"] = "false"
+        return
+    env["LANGFUSE_TRACING_ENVIRONMENT"] = os.environ.get("RALPH_LANGFUSE_ENV", "ralph")
+    env["LANGFUSE_RELEASE"] = LANGFUSE_RUN_ID
+    if role:
+        env["LANGFUSE_USER_ID"] = role
 
 
 # ══════════════════════════════════════════════════════════════
@@ -185,15 +207,18 @@ def _kill_process(process: subprocess.Popen) -> None:
         pass
 
 
-def run_cc_stream(cmd: list[str], prompt: str, label: str, total_timeout: int) -> str:
+def run_cc_stream(cmd: list[str], prompt: str, label: str, total_timeout: int,
+                  role: str = "") -> str:
     """
     运行 pi agent 子进程并实时解析 JSON 事件流。
     prompt 通过 stdin 传递，避免命令行参数编码/长度问题。
     用独立线程非阻塞读取 stdout，主循环检测超时。
+    role: Langfuse 角色标签（developer / validator / pm），用于 trace 分组。
     返回: "ok" | "idle" | "timeout" | "error" | "api_error"
     """
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
+    _inject_langfuse_env(env, role)
     try:
         process = subprocess.Popen(
             cmd, cwd=str(PROJECT_ROOT),
@@ -325,7 +350,11 @@ def parse_frontmatter(filepath: Path) -> dict:
         m = re.match(r'^(\w+)\s*:\s*(.+)$', line)
         if m:
             key, val = m.group(1), m.group(2).strip().strip('"').strip("'")
-            if val.isdigit():
+            # id 必须保持字符串：避免 "001" 被转成 1，导致快照键("1")与
+            # adjustments.json 中的审计 id("001") 不匹配，使合法 split/reset 被误回滚
+            if key == "id":
+                pass
+            elif val.isdigit():
                 val = int(val)
             elif val.lower() in ("true", "false"):
                 val = val.lower() == "true"
@@ -732,7 +761,7 @@ def run_developer(iteration: int, task_file: Path) -> bool:
 
     prompt = build_developer_prompt(task_file)
     cmd = build_cmd()
-    result = run_cc_stream(cmd, prompt, "开发 Agent", TIMEOUT_SECONDS)
+    result = run_cc_stream(cmd, prompt, "开发 Agent", TIMEOUT_SECONDS, role="developer")
 
     if result == "ok":
         print("\n  开发迭代完成")
@@ -745,7 +774,7 @@ def run_developer(iteration: int, task_file: Path) -> bool:
         reason = reasons[result]
         print(f"  {reason}，等待 5 秒后重试...")
         time.sleep(5)
-        result2 = run_cc_stream(cmd, prompt, "开发 Agent (重试)", TIMEOUT_SECONDS)
+        result2 = run_cc_stream(cmd, prompt, "开发 Agent (重试)", TIMEOUT_SECONDS, role="developer")
         if result2 == "ok":
             print("\n  开发迭代完成 (重试成功)")
             return False
@@ -767,7 +796,7 @@ def run_validator(iteration: int, task_file: Path) -> None:
 
     prompt = build_validator_prompt(task_file)
     cmd = build_cmd()
-    result = run_cc_stream(cmd, prompt, "Validator", TIMEOUT_SECONDS * 2)
+    result = run_cc_stream(cmd, prompt, "Validator", TIMEOUT_SECONDS * 2, role="validator")
 
     if result == "ok":
         print("\n  验证完成")
@@ -777,7 +806,7 @@ def run_validator(iteration: int, task_file: Path) -> None:
         reason = reasons[result]
         print(f"  {reason}，等待 5 秒后重试...")
         time.sleep(5)
-        result2 = run_cc_stream(cmd, prompt, "Validator (重试)", TIMEOUT_SECONDS * 2)
+        result2 = run_cc_stream(cmd, prompt, "Validator (重试)", TIMEOUT_SECONDS * 2, role="validator")
         if result2 == "ok":
             print("\n  验证完成 (重试成功)")
             return
@@ -799,7 +828,7 @@ def run_pm(iteration: int) -> None:
 
     prompt = build_pm_prompt()
     cmd = build_cmd()
-    result = run_cc_stream(cmd, prompt, "PM", TIMEOUT_SECONDS)
+    result = run_cc_stream(cmd, prompt, "PM", TIMEOUT_SECONDS, role="pm")
 
     if result == "ok":
         print("\n  规划完成")
@@ -809,7 +838,7 @@ def run_pm(iteration: int) -> None:
         reason = reasons[result]
         print(f"  {reason}，等待 5 秒后重试...")
         time.sleep(5)
-        result2 = run_cc_stream(cmd, prompt, "PM (重试)", TIMEOUT_SECONDS)
+        result2 = run_cc_stream(cmd, prompt, "PM (重试)", TIMEOUT_SECONDS, role="pm")
         if result2 == "ok":
             print("\n  规划完成 (重试成功)")
             return
@@ -847,6 +876,14 @@ def parse_args() -> argparse.Namespace:
                         help="不启动监控面板")
     parser.add_argument("--port", type=int, default=17331,
                         help="监控面板端口 (默认: 17331)")
+    parser.add_argument("--run-id", default=None,
+                        help="本次运行标识（Langfuse release 标签），默认时间戳")
+    parser.add_argument("--no-validator", action="store_true",
+                        help="跳过 Validator（对照实验用）")
+    parser.add_argument("--no-pm", action="store_true",
+                        help="跳过 PM 治理（对照实验用）")
+    parser.add_argument("--no-guard", action="store_true",
+                        help="关闭 PM 越权回滚（对照实验用）")
     return parser.parse_args()
 
 
@@ -855,13 +892,22 @@ def parse_args() -> argparse.Namespace:
 # ══════════════════════════════════════════════════════════════
 
 def main():
-    global MAX_ITERATIONS, AGENT, _state_started_at
+    global MAX_ITERATIONS, AGENT, _state_started_at, LANGFUSE_RUN_ID
+    global NO_VALIDATOR, NO_PM, NO_GUARD
 
     args = parse_args()
     MAX_ITERATIONS = args.max_iterations
     AGENT = args.agent
+    if args.run_id:
+        LANGFUSE_RUN_ID = args.run_id
+    NO_VALIDATOR = args.no_validator
+    NO_PM = args.no_pm
+    NO_GUARD = args.no_guard
 
-    print(f"启动 Ralph - Agent: {AGENT} - 最大迭代: {MAX_ITERATIONS}")
+    print(f"启动 Ralph - Agent: {AGENT} - 最大迭代: {MAX_ITERATIONS} - run-id: {LANGFUSE_RUN_ID}")
+    if NO_VALIDATOR or NO_PM or NO_GUARD:
+        print(f"  对照模式: validator={'off' if NO_VALIDATOR else 'on'}, "
+              f"pm={'off' if NO_PM else 'on'}, guard={'off' if NO_GUARD else 'on'}")
 
     # 前置检查
     if project_context_file() is None:
@@ -920,9 +966,13 @@ def main():
                 time.sleep(2)
                 continue
 
-            # 第二步：验证 Agent
+            # 第二步：验证 Agent（--no-validator 可跳过，用于对照实验）
             done_task = DONE_DIR / task_file.name
-            if done_task.exists():
+            if not done_task.exists():
+                print("  警告: 开发 Agent 未将任务移到 done/，跳过验证")
+            elif NO_VALIDATOR:
+                print(f"  已跳过验证（--no-validator），任务 {task_id} 直接视为完成")
+            else:
                 update_state(phase="validating")
                 run_validator(i, task_file)
 
@@ -932,17 +982,18 @@ def main():
                     print(f"  验证失败 (第 {retry_count} 次重试)")
                 else:
                     print(f"  任务 {task_id} 验证通过")
-            else:
-                print(f"  警告: 开发 Agent 未将任务移到 done/，跳过验证")
 
-            # 第三步：PM Agent 治理（沉淀 patterns + 调整任务队列，带越权回滚保护）
-            if PM_INSTRUCTION.exists():
+            # 第三步：PM Agent 治理（--no-pm 可跳过；--no-guard 关闭越权回滚以做对照）
+            if PM_INSTRUCTION.exists() and not NO_PM:
                 update_state(phase="planning")
-                backup_tasks_tree()
-                pm_before_snap = snapshot_tasks_tree()
-                pm_before_adj_len = len(_read_adjustments())
-                run_pm(i)
-                _guard_pm_changes(pm_before_snap, pm_before_adj_len)
+                if NO_GUARD:
+                    run_pm(i)
+                else:
+                    backup_tasks_tree()
+                    pm_before_snap = snapshot_tasks_tree()
+                    pm_before_adj_len = len(_read_adjustments())
+                    run_pm(i)
+                    _guard_pm_changes(pm_before_snap, pm_before_adj_len)
 
             # 第四步：检查是否全部完成
             update_state(phase="idle")

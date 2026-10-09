@@ -108,6 +108,12 @@ PM 是 LLM，指令约束不可靠，因此引擎在 PM 运行前后做目录树
 
 # 直接调用 Python 引擎
 python3 scripts/ralph/ralph.py pi --max-iterations 30 --no-dashboard --port 8080
+
+# 指定本次运行标识（用于 Langfuse 按运行分组）
+python3 scripts/ralph/ralph.py pi --max-iterations 30 --run-id my-run-001
+
+# 对照实验：仅 Developer（跳过验证与治理）
+python3 scripts/ralph/ralph.py pi --max-iterations 30 --no-validator --no-pm
 ```
 
 ## 目录结构
@@ -123,6 +129,10 @@ scripts/ralph/
 ├── DEVELOPER.md        # Developer Agent 指令
 ├── VALIDATOR.md        # Validator Agent 指令
 ├── PM.md               # PM Agent 指令（后向沉淀 + 前向规划）
+├── eval_langfuse.py    # 评测采集脚本（Langfuse + 本地任务终态 → 报告）
+├── ab_experiment.py    # A/B 对照实验编排器（完整/单 Agent/无 PM/无防腐）
+├── tests/              # 单元测试（PM 越权防腐对抗性测试）
+├── benchmark/          # 对照实验任务集与运行归档
 ├── adjustments.json    # PM 任务队列调整的审计日志
 ├── progress.txt        # 进度日志（Developer/Validator 写入，PM 读取）
 ├── state.json          # 运行状态（供 Dashboard 读取）
@@ -135,7 +145,8 @@ scripts/ralph/
 └── skills/             # pi agent 技能（prd-check / task-decomposition / agent-browser）
 
 docs/
-└── patterns-*.md       # PM 沉淀的可复用经验（按主题分文件，自动生成）
+├── patterns-*.md       # PM 沉淀的可复用经验（按主题分文件，自动生成）
+└── agent-eval.md       # Agent 评测口径（维度/公式/统计方法）
 ```
 
 > 说明：任务的执行顺序由**文件名序号**决定；frontmatter 的 `id` 是任务的稳定身份，
@@ -171,3 +182,49 @@ priority: 1
 - 当前迭代进度
 - 运行时间统计
 - 实时日志输出
+
+## 评测与对照实验
+
+指标维度、公式与统计口径见 [`docs/agent-eval.md`](docs/agent-eval.md)。
+
+### 可观测性（Langfuse）
+
+Ralph 的每次 Agent 调用（Developer / Validator / PM）都会通过 pi 的
+`@langfuse/pi-observability-plugin` 上报 trace。引擎已自动为每次调用注入标签：
+
+- `LANGFUSE_TRACING_ENVIRONMENT=ralph`（与日常交互区分）
+- `LANGFUSE_RELEASE=<run-id>`（按整轮运行聚合）
+- `LANGFUSE_USER_ID=<developer|validator|pm>`（按角色聚合）
+
+设置 `RALPH_NO_LANGFUSE=1` 可关闭上报。
+
+### 采集报告
+
+```bash
+# 最近 7 天（读取 ~/.pi/agent/langfuse.json 凭据）
+python3 scripts/ralph/eval_langfuse.py
+
+# 指定时间窗与运行
+python3 scripts/ralph/eval_langfuse.py --days 30 --environment ralph \
+  --out docs/eval-report.md --json docs/eval-data.json
+```
+
+### 越权防腐单元测试
+
+```bash
+python3 scripts/ralph/tests/test_pm_guard.py
+```
+
+覆盖篡改受控字段、正文篡改、伪造完成、未审计删除/重置、收敛上限、审计删除、
+备份回滚、`id` 字符串保持等 18 个对抗性用例（确定性、可进 CI）。
+
+### A/B 对照实验
+
+```bash
+python3 scripts/ralph/ab_experiment.py --plan                        # 预演
+python3 scripts/ralph/ab_experiment.py --run --configs A,B,C,D       # 实跑
+python3 scripts/ralph/ab_experiment.py --report                      # 汇总
+```
+
+对比 A 完整闭环 / B 仅 Developer / C 无 PM / D 关闭越权回滚四组的
+完成率、首次通过率、阻塞率与越权拦截次数。

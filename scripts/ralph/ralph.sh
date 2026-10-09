@@ -1,6 +1,7 @@
 #!/bin/bash
 # Ralph - AI Agent 循环执行器（pi agent 后端）
 # Usage: ./ralph.sh [--tool pi] [max_iterations] [--no-dashboard] [--port PORT]
+#        [--run-id ID] [--no-validator] [--no-pm] [--no-guard]
 #
 # 此脚本是 ralph.py 的薄启动入口，负责检查 Python 环境并透传参数。
 
@@ -45,6 +46,14 @@ while [[ $# -gt 0 ]]; do
     --port)
       PY_ARGS+=("$1" "$2")
       shift 2
+      ;;
+    --run-id)
+      PY_ARGS+=("$1" "$2")
+      shift 2
+      ;;
+    --no-validator|--no-pm|--no-guard)
+      PY_ARGS+=("$1")
+      shift
       ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
