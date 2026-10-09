@@ -364,9 +364,10 @@ def build_report(frm: str, to: str, filters: dict, tasks: dict, m: dict) -> str:
     A("")
     A("- ✅ 已实现：trace 按运行/角色分组（`ralph.py` 注入 `LANGFUSE_*`）；"
       "`pass@k / pass^k`（`metrics.py` + `ab_experiment.py --repeats`）；"
-      "验证证据统计（`metrics.evidence_metrics`）。")
-    A("- ⚠️ 待补齐：token/cost 明细（列表接口不含 usageDetails，改用 UI/Metrics/Scores）；"
-      "事实正确率/证据充分度（需 LLM-as-judge）；工具正确率（需为任务定义期望工具集后断言）。")
+      "验证证据（`metrics.evidence_metrics`）；工具错误率（`metrics.tool_metrics`）；"
+      "成本聚合（`metrics.cost_metrics`）；事实正确率/证据充分度（`judge.py` LLM-as-judge）。")
+    A("- ⚠️ 待补齐：工具选择正确率（需为任务定义期望工具集后断言）；"
+      "token 明细（列表接口不含 usageDetails，改用 UI/Metrics/Scores）。")
     A("")
     return "\n".join(L)
 

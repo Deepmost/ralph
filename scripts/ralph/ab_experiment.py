@@ -154,6 +154,8 @@ def run_config(cfg: str, run_id: str, args: argparse.Namespace) -> Path:
     # 归档运行时产物
     if (SCRIPT_DIR / "tasks").exists():
         shutil.copytree(SCRIPT_DIR / "tasks", run_dir / "tasks")
+    if SANDBOX_DIR.exists():
+        shutil.copytree(SANDBOX_DIR, run_dir / "sandbox")
     for name in ("adjustments.json", "progress.txt", "state.json"):
         src = SCRIPT_DIR / name
         if src.exists():
@@ -236,6 +238,8 @@ def compute_run_metrics(run_dir: Path, cfg: str = "", run_id: str = "") -> dict:
         "pm_adjustments": adj_actions,
         "guard_hits": _count_guard_hits(run_dir),
         "evidence": metrics.evidence_metrics(run_dir),
+        "tools": metrics.tool_metrics(run_dir),
+        "cost": metrics.cost_metrics(run_dir),
     }
 
 
@@ -282,15 +286,18 @@ def build_report(runs: list[dict]) -> str:
         L.append("_暂无运行归档。先执行 `--run`。_")
         return "\n".join(L)
 
-    L.append("| 配置 | run-id | 任务总数 | 完成 | 完成率 | 首次通过率 | 阻塞率 | 越权拦截 | 验证命令 | PM 调整 |")
-    L.append("|---|---|---|---|---|---|---|---|---|---|")
+    L.append("| 配置 | run-id | 任务总数 | 完成 | 完成率 | 首次通过率 | 阻塞率 | 越权拦截 | 验证命令 | 工具错误率 | 成本($) | PM 调整 |")
+    L.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for r in runs:
         ev = r.get("evidence", {}) or {}
+        tl = r.get("tools", {}) or {}
+        cs = r.get("cost", {}) or {}
         L.append(
             f"| {r.get('config','?')} | {r.get('run_id','?')} | {r.get('total',0)} | "
             f"{r.get('done_ok',0)} | {r.get('completion_rate',0)}% | "
             f"{r.get('first_pass_rate',0)}% | {r.get('blocked_rate',0)}% | "
-            f"{r.get('guard_hits',0)} | {ev.get('verification_commands',0)} | {r.get('pm_adjustments',{})} |"
+            f"{r.get('guard_hits',0)} | {ev.get('verification_commands',0)} | "
+            f"{tl.get('tool_error_rate',0)}% | {cs.get('cost_total',0)} | {r.get('pm_adjustments',{})} |"
         )
     L.append("")
 

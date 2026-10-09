@@ -25,10 +25,12 @@
 | trace 按运行/角色分组 | ✅ | `ralph.py` 注入 `LANGFUSE_*` |
 | pass@k / pass^k | ✅ | `metrics.py` + `ab_experiment.py --repeats` |
 | 验证证据（groundedness 代理） | ✅ | `metrics.evidence_metrics` |
+| 事实正确率 / 证据充分度 | ✅ | `judge.py`（LLM-as-judge） |
+| 工具错误率 / 工具分布 | ✅ | `metrics.tool_metrics` |
+| 成本聚合（美元） | ✅ | `metrics.cost_metrics`（从 run.log 提取） |
 | A/B 对照实验 | ✅ | `ab_experiment.py` |
-| 事实正确率 / 证据充分度（judge） | ⏳ 待补齐 | 需 LLM-as-judge |
-| 工具正确率（期望工具集断言） | ⏳ 待补齐 | 需为任务定义期望工具集 |
-| token/cost 明细聚合 | ⏳ 待补齐 | Langfuse UI/Metrics/Scores |
+| 工具选择正确率（期望工具集断言） | ⏳ 待补齐 | 需为任务定义期望工具集 |
+| token 明细聚合 | ⏳ 待补齐 | Langfuse UI/Metrics/Scores |
 
 ## 0. 评测单元：一次 task run
 

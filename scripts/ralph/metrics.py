@@ -104,3 +104,61 @@ def evidence_metrics(run_dir: Path) -> dict:
         "verification_commands": verification_commands,
         "has_verification": verification_commands > 0,
     }
+
+
+# ══════════════════════════════════════════════════════════════
+#  工具正确率（工具选择 / 调用错误）
+# ══════════════════════════════════════════════════════════════
+
+# 引擎把工具调用格式化为 "[Tool] <name>: ..."；错误为 "[Tool Error] <name>"
+_TOOL_CALL_RE = re.compile(r"\[Tool\]\s+(\w+)\s*:")
+_TOOL_ERROR_RE = re.compile(r"\[Tool Error\]\s+(\w+)")
+
+
+def tool_metrics(run_dir: Path) -> dict:
+    """
+    统计一次运行的工具调用与错误。
+
+    - 工具选择：各工具调用次数分布
+    - 工具错误率：工具执行失败占比（ToolFailBench 意义上的失败信号）
+    - used_write_or_edit：是否真正改动了文件（防止"只读不改就宣称完成"）
+    """
+    log = run_dir / "run.log"
+    calls: dict[str, int] = {}
+    errors = 0
+    if log.exists():
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+            m = _TOOL_CALL_RE.search(line)
+            if m:
+                calls[m.group(1)] = calls.get(m.group(1), 0) + 1
+            if _TOOL_ERROR_RE.search(line):
+                errors += 1
+    total = sum(calls.values())
+    return {
+        "tool_calls": dict(sorted(calls.items(), key=lambda kv: -kv[1])),
+        "total_tool_calls": total,
+        "tool_errors": errors,
+        "tool_error_rate": round(errors / total * 100, 1) if total else 0.0,
+        "used_write_or_edit": bool(calls.get("write") or calls.get("edit")),
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+#  成本聚合（从 run.log 的 [Turn] 费用 提取，绕过 Langfuse 列表接口限制）
+# ══════════════════════════════════════════════════════════════
+
+_COST_RE = re.compile(r"\[Turn\]\s*费用:\s*\$([0-9.]+)")
+
+
+def cost_metrics(run_dir: Path) -> dict:
+    """从一次运行的 stdio 日志里汇总模型费用（美元）。"""
+    log = run_dir / "run.log"
+    total = 0.0
+    turns = 0
+    if log.exists():
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+            m = _COST_RE.search(line)
+            if m:
+                total += float(m.group(1))
+                turns += 1
+    return {"cost_total": round(total, 6), "cost_turns": turns}

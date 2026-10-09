@@ -30,8 +30,27 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 import eval_langfuse  # noqa: E402
 import ab_experiment  # noqa: E402
+import judge as judge_mod  # noqa: E402
 
 TESTS_DIR = SCRIPT_DIR / "tests"
+
+
+# ══════════════════════════════════════════════════════════════
+#  面 ⑤：LLM-as-judge（事实正确率 / 证据充分度）
+# ══════════════════════════════════════════════════════════════
+
+def judge_runs(tasks_dir: Path, model: str | None = None) -> list[dict]:
+    """对每个配置的最新一次运行归档调用裁判。"""
+    groups = ab_experiment.runs_by_config()
+    results = []
+    for cfg in sorted(groups):
+        latest = groups[cfg][-1]
+        sandbox = latest / "sandbox"
+        if not sandbox.exists():
+            continue
+        r = judge_mod.judge(tasks_dir, sandbox, model=model)
+        results.append({"config": cfg, "run_id": latest.name, **r})
+    return results
 
 
 # ══════════════════════════════════════════════════════════════
@@ -71,7 +90,8 @@ def run_unit_tests() -> dict:
 # ══════════════════════════════════════════════════════════════
 
 def build_project_report(unit: dict, obs: dict, ab_report: str,
-                         window: dict, filters: dict) -> str:
+                         window: dict, filters: dict,
+                         judge_results: list[dict] | None = None) -> str:
     L: list[str] = []
     A = L.append
     A("# Ralph 项目评测报告")
@@ -119,6 +139,20 @@ def build_project_report(unit: dict, obs: dict, ab_report: str,
     A(ab_report)
     A("")
 
+    # ④ LLM-as-judge
+    if judge_results:
+        A("## ④ 事实正确率 / 证据充分度（LLM-as-judge）")
+        A("")
+        A("| 配置 | run-id | 事实正确率 | 证据充分度 | 理由 |")
+        A("|---|---|---|---|---|")
+        for j in judge_results:
+            fc = j.get("factual_correctness")
+            gr = j.get("groundedness")
+            A(f"| {j.get('config','?')} | {j.get('run_id','?')} | "
+              f"{fc if fc is not None else '-'} | {gr if gr is not None else '-'} | "
+              f"{j.get('reason','')} |")
+        A("")
+
     A("---")
     A("")
     A("## 评测面索引")
@@ -144,6 +178,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--skip-langfuse", action="store_true", help="跳过可观测面（无网/无凭据）")
     p.add_argument("--out", default=None, help="报告输出路径")
     p.add_argument("--json", dest="json_out", default=None, help="原始指标 JSON 输出路径")
+    p.add_argument("--judge", action="store_true", help="启用 LLM-as-judge（事实正确率/证据充分度）")
+    p.add_argument("--judge-model", default=None, help="裁判使用的模型")
     return p.parse_args()
 
 
@@ -170,10 +206,16 @@ def main() -> int:
 
     ab_report = ab_experiment.build_report(ab_experiment.load_runs())
 
+    judge_results: list[dict] = []
+    if args.judge:
+        print("运行 LLM-as-judge（每个配置最新一次运行）...", file=sys.stderr)
+        judge_results = judge_runs(ab_experiment.DEFAULT_TASKS, model=args.judge_model)
+
     report = build_project_report(
         unit, obs, ab_report,
         {"from": frm, "to": to},
         {"environment": args.environment},
+        judge_results,
     )
     print(report)
 
@@ -183,7 +225,7 @@ def main() -> int:
     if args.json_out:
         import json
         Path(args.json_out).write_text(
-            json.dumps({"unit": unit, "observability": obs,
+            json.dumps({"unit": unit, "observability": obs, "judge": judge_results,
                         "window": {"from": frm, "to": to}}, ensure_ascii=False, indent=2),
             encoding="utf-8")
         print(f"指标 JSON 已写入：{args.json_out}", file=sys.stderr)

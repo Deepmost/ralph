@@ -131,7 +131,8 @@ scripts/ralph/
 ├── PM.md               # PM Agent 指令（后向沉淀 + 前向规划）
 ├── eval_langfuse.py    # 评测采集脚本（Langfuse + 本地任务终态 → 报告）
 ├── evaluate.py         # 全项目评测总入口（聚合四个评测面）
-├── metrics.py          # 指标计算（pass@k/pass^k、验证证据）
+├── metrics.py          # 指标计算（pass@k/pass^k、工具、证据、成本）
+├── judge.py            # LLM-as-judge（事实正确率 / 证据充分度）
 ├── ab_experiment.py    # A/B 对照实验编排器（完整/单 Agent/无 PM/无防腐）
 ├── tests/              # 单元测试（引擎逻辑 / 越权防腐 / 指标函数）
 ├── benchmark/          # 对照实验任务集与运行归档
