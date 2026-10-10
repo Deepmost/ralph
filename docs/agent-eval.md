@@ -110,6 +110,12 @@ task run = 任务/成功标准 + 初始状态 + Agent 配置 + 执行环境
 - Ralph 特有：**PM 越权防腐**——篡改受控字段、伪造完成、未审计删除/重置、超收敛上限 → 自动回滚
 - 覆盖负例：prompt injection、tool output poisoning、越权、状态恢复、记忆污染
 
+> **落地载体**：`scripts/ralph/benchmark/adversarial-tasks/`（负例/注入/受保护文件/回归陷阱/依赖链）
+> + `adversarial_grader.py`（`false_done_rate`、`overclaim_rate`、`validator_precision/recall`、
+> `tests_unmodified`、`regression_intact`、`chain_integrity`、`guard_hits` 等）。
+> 必须用 `adversarial_experiment.py` 运行（它会在运行副本中删除期望值文件，防止 Agent 读到答案）。
+> 口径见 [`benchmark/ADVERSARIAL.md`](../scripts/ralph/benchmark/ADVERSARIAL.md)。
+
 ### 2.8 效率成本（成本级）
 - token（输入/输出/缓存）、$、turn 数、工具调用数、重试数
 - 关键指标：`cost / 成功任务`、`turns / 成功任务`

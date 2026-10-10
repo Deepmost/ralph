@@ -1,0 +1,27 @@
+# OpenBench arm: 本项目 Ralph harness（Developer + Validator 闭环）
+# 与 pi-ocgo 臂固定同一模型（opencode-go/deepseek-v4.1-flash），只变 harness。
+#
+# 通过 wrapper 驱动：把 Ralph 工具链注入 OpenBench 工作区，用一个任务文件
+# 承载 OpenBench 的 instruction，跑 Developer→Validator（可选 PM），跑完清理。
+#
+# 注意：command 里的 wrapper 路径是本机绝对路径（manifest 无仓库占位符）。
+# 换机器时改这里即可。
+kind = "manifest"
+name = "ralph"
+inherit_env = true
+isolate_home = false
+command = [
+  "bash",
+  "/Users/deepmost/Documents/whaty-project/whaty-ralph/scripts/ralph/benchmark/openbench/ralph_arm.sh",
+  "{workspace}",
+  "{prompt}",
+]
+version_command = ["echo", "ralph-arm-1"]
+
+[models]
+"deepseek-v4.1-flash" = "deepseek-v4.1-flash"
+
+[env]
+RALPH_MAX_ITERS = "2"
+RALPH_ENABLE_PM = "0"
+RALPH_NO_LANGFUSE = "1"

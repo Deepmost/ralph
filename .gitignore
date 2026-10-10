@@ -7,6 +7,14 @@ scripts/ralph/tasks.bak/
 scripts/ralph/state.json
 scripts/ralph/benchmark/runs/
 
+# 本次新增的文档与测试产物（不计入提交）
+scripts/ralph/benchmark/ADVERSARIAL.md
+scripts/ralph/benchmark/openbench/README.md
+scripts/ralph/benchmark/openbench/RESULT.md
+scripts/ralph/benchmark/multiagentbench/README.md
+scripts/ralph/benchmark/multiagentbench/RESULT.md
+scripts/ralph/benchmark/adversarial-tasks/seed/test_ledger.py
+
 # IDE
 .idea/
 

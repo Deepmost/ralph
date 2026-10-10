@@ -1,0 +1,30 @@
+# OpenBench arm: 单个 pi agent（baseline）
+# 与 Ralph 臂固定同一模型（opencode-go/deepseek-v4.1-flash），只变 harness。
+#
+# 用 BYO manifest 的原因为：OpenBench 内置 pi adapter 的模型 pin 指向
+# openai-codex 订阅或 ZAI/Moonshot/OpenRouter 的 key；本机 pi 只登录了
+# opencode-go，所以用 manifest 显式指定 provider/model。
+#
+# inherit_env=true + isolate_home=false：pi 需要真实 HOME 下的模型目录
+# （models-store.json）与鉴权（auth.json）。本机为单用户可信环境，可接受。
+kind = "manifest"
+name = "pi-ocgo"
+inherit_env = true
+isolate_home = false
+command = [
+  "pi", "-p",
+  "--no-approve",
+  "--no-extensions",
+  "--no-session",
+  "--provider", "opencode-go",
+  "--model", "{model}",
+  "--mode", "json",
+  "{prompt}",
+]
+version_command = ["pi", "--version"]
+policy_headless_args = ["-p"]
+policy_auto_approve_args = ["--no-approve"]
+unset_env = ["PI_CODING_AGENT_SESSION_DIR", "PI_PACKAGE_DIR"]
+
+[models]
+"deepseek-v4.1-flash" = "deepseek-v4.1-flash"

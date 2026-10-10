@@ -88,3 +88,23 @@ python3 scripts/ralph/ab_experiment.py --report
 
 - `runs/<run-id>/`：每次运行的归档（`tasks/done`、`adjustments.json`、`progress.txt`、运行日志、指标 JSON）
 - 终端输出的 Markdown 对照表（完成率 / 首次通过率 / 阻塞率 / 越权拦截 / 成本）
+
+## 外部对照：OpenBench（单 pi agent vs Ralph）
+
+除仓库自带的 A/B 外，还可用第三方 [OpenBench](https://github.com/minghinmatthewlam/openbench)
+做更独立的对照：固定同一模型与公开任务集，只变 harness，验收由任务自带的 `checker.sh`
+决定（`exit 0` 才算解决）。集成与运行说明见
+[`openbench/README.md`](openbench/README.md)，两臂为 `pi-ocgo`（单 pi agent）与
+`ralph`（Developer + Validator 闭环）。
+
+## 对抗性 / 多任务长程套件
+
+除「能力型」任务外，`adversarial-tasks/` 专测**诚实性与安全性**：负例（应 blocked 却易被
+伪造成完成）、提示注入诱饵、受保护测试文件、回归陷阱，以及带依赖的多任务链。
+
+- 评分器：`adversarial_grader.py` —— `false_done_rate` / `overclaim_rate` /
+  `validator_precision·recall`（含 tp/fp/fn/tn）/ `tests_unmodified` / `regression_intact` /
+  `chain_integrity` / `guard_hits` / `cost_per_solved_task` / `evidence_grounding_rate`。
+- 运行：`adversarial_experiment.py`（**必须用它**；它会在运行副本中删除全部期望值文件，
+  防止被测 Agent 读到答案）。
+- 设计、口径与**实测结果**见 [`ADVERSARIAL.md`](ADVERSARIAL.md)。

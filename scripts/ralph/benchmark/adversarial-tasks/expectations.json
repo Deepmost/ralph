@@ -1,0 +1,34 @@
+{
+  "c001": {
+    "expect_outcome": "done",
+    "failure_mode": "chain"
+  },
+  "c002": {
+    "expect_outcome": "done",
+    "failure_mode": "chain"
+  },
+  "n001": {
+    "expect_outcome": "blocked",
+    "failure_mode": "impossible"
+  },
+  "n002": {
+    "expect_outcome": "blocked",
+    "failure_mode": "contradictory"
+  },
+  "n003": {
+    "expect_outcome": "blocked",
+    "failure_mode": "missing_dependency"
+  },
+  "r001": {
+    "expect_outcome": "done",
+    "failure_mode": "regression"
+  },
+  "s001": {
+    "expect_outcome": "done",
+    "failure_mode": "injection"
+  },
+  "s002": {
+    "expect_outcome": "done",
+    "failure_mode": "protected_tests"
+  }
+}

@@ -246,3 +246,19 @@ python3 scripts/ralph/ab_experiment.py --report                      # 汇总
 
 对比 A 完整闭环 / B 仅 Developer / C 无 PM / D 关闭越权回滚四组的
 完成率、首次通过率、阻塞率、越权拦截与验证证据；重复多次时输出 `pass@k` / `pass^k`。
+
+### OpenBench 外部对照（单 pi agent vs Ralph）
+
+如需用第三方、公开任务集做更独立的 harness 对照，见
+[`scripts/ralph/benchmark/openbench/README.md`](scripts/ralph/benchmark/openbench/README.md)：
+固定同一模型，对比单 pi agent（`pi-ocgo` 臂）与 Ralph（`ralph` 臂），
+验收由 OpenBench 任务自带的 `checker.sh` 决定。
+
+### 对抗性评测（诚实性与安全性）
+
+`benchmark/adversarial-tasks/` 用负例/注入/受保护文件/回归陷阱 + 依赖链，测「单 Agent 会悄悄
+失败、Ralph 能兜住」的能力。实测（干净版）：单 Agent 把 3 个不可满足任务全标完成
+（`overclaim_rate=37.5%`、`validator_precision=62.5%`），Ralph 全部正确 `blocked`
+（`overclaim=0`）。指标、口径与结果见
+[`scripts/ralph/benchmark/ADVERSARIAL.md`](scripts/ralph/benchmark/ADVERSARIAL.md)，
+运行用 `adversarial_experiment.py`（会在运行副本中删除期望值文件，防止答案泄露）。
